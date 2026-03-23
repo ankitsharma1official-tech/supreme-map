@@ -2,111 +2,93 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AETHER-NET | Supreme Navigator 2026</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>AETHER-NET | Mobile Optimizer</title>
     <script src="https://unpkg.com/maplibre-gl@5.0.1/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@5.0.1/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://cdn.maptiler.com/maptiler-geocoding-control/v1.3.3/maplibregl.umd.js"></script>
     <link href="https://cdn.maptiler.com/maptiler-geocoding-control/v1.3.3/style.css" rel="stylesheet">
     <style>
-        :root { --neon: #00f2ff; --bg: #020202; --active: #3DDC84; }
-        body { margin: 0; padding: 0; background: var(--bg); color: white; font-family: 'Inter', sans-serif; overflow: hidden; }
+        :root { --neon: #00f2ff; --bg: #020202; }
+        body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         
-        .hud { position: absolute; z-index: 100; pointer-events: none; background: rgba(0,0,0,0.85); backdrop-filter: blur(15px); border: 1px solid rgba(0,242,255,0.2); padding: 20px; border-radius: 4px; }
-        .top-left { top: 20px; left: 20px; width: 320px; border-left: 4px solid var(--neon); }
-        .bottom-ctrl { bottom: 40px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; pointer-events: auto; }
+        /* Fixed Mobile HUD */
+        .hud-top { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 8px; border-left: 3px solid var(--neon); font-size: 12px; pointer-events: none; }
         
-        button { background: #111; color: var(--neon); border: 1px solid var(--neon); padding: 12px 24px; cursor: pointer; border-radius: 4px; font-weight: bold; text-transform: uppercase; font-size: 11px; transition: 0.3s; }
-        button:hover { background: var(--neon); color: #000; box-shadow: 0 0 15px var(--neon); }
-        button.active { border-color: var(--active); color: var(--active); box-shadow: 0 0 20px var(--active); }
+        /* Bottom Control Bar - Better for Thumbs */
+        .bottom-nav { 
+            position: absolute; bottom: 20px; left: 0; width: 100%; 
+            display: flex; justify-content: center; gap: 8px; z-index: 10;
+            padding: 0 10px; box-sizing: border-box;
+        }
         
-        #year-display { font-size: 28px; color: var(--neon); font-weight: bold; }
+        button { 
+            background: rgba(17, 17, 17, 0.9); color: var(--neon); border: 1px solid var(--neon); 
+            padding: 10px 12px; border-radius: 6px; font-size: 11px; font-weight: bold;
+            flex: 1; max-width: 120px; text-transform: uppercase;
+        }
+
+        /* Shrink Search Bar for Mobile */
+        .maplibregl-ctrl-geocoder { width: 180px !important; min-width: 180px !important; margin: 10px !important; }
     </style>
 </head>
 <body>
 
 <div id="map"></div>
+<div class="hud-top">AETHER-OS: MOBILE v1.1<br><span id="status" style="color:var(--neon)">READY</span></div>
 
-<div class="hud top-left">
-    <div style="font-weight: bold; letter-spacing: 2px;">AETHER-OS // SUPREME</div>
-    <div id="status" style="font-size: 10px; color: var(--neon); margin-top: 5px;">SYSTEM: IDLE</div>
-    <div id="gps-data" style="font-size: 11px; margin-top: 10px; color: #888;">Waiting for satellite lock...</div>
-</div>
-
-<div class="bottom-ctrl">
-    <button id="follow-btn" onclick="toggleFollowMode()">Enable Follow Mode</button>
-    <button onclick="map.flyTo({zoom: 2, pitch: 0})">Global View</button>
+<div class="bottom-nav">
+    <button onclick="toggleFollow()">Follow Me</button>
+    <button onclick="map.setProjection({type:'globe'})">Globe</button>
+    <button onclick="map.setProjection({type:'mercator'})">2D Map</button>
 </div>
 
 <script>
-    const API_KEY = '6zP9RexeBTwxHcQlsSZT'; 
-    let watchId = null;
+    const API_KEY = '6zP9RexeBTwxHcQlsSZT';
     let isFollowing = false;
+    let watchId = null;
 
     const map = new maplibregl.Map({
         container: 'map',
         style: `https://api.maptiler.com/maps/hybrid/style.json?key=${API_KEY}`,
-        center: [78.9629, 20.5937], // India Center
-        zoom: 4, pitch: 45, antialias: true
+        center: [78.9, 20.5], zoom: 3, pitch: 45,
+        fadeDuration: 200, // Faster tile loading
+        performanceMetrics: true 
     });
 
     map.on('style.load', () => {
-        map.setProjection({ type: 'globe' });
+        // Reduced exaggeration for smoother mobile performance
         map.addSource('terrain', { type: 'raster-dem', url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${API_KEY}`, tileSize: 256 });
-        map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
+        map.setTerrain({ source: 'terrain', exaggeration: 1.0 });
+
+        // Optimization: Only load buildings at very high zoom
+        map.addLayer({
+            'id': '3d-buildings', 'source': 'composite', 'source-layer': 'building',
+            'filter': ['==', 'extrude', 'true'], 'type': 'fill-extrusion', 'minzoom': 16,
+            'paint': { 'fill-extrusion-color': '#555', 'fill-extrusion-height': ['get', 'height'], 'fill-extrusion-opacity': 0.5 }
+        });
     });
 
-    function toggleFollowMode() {
-        const btn = document.getElementById('follow-btn');
+    function toggleFollow() {
         if (!isFollowing) {
-            startFollowing();
-            btn.innerText = "Following Active";
-            btn.classList.add('active');
             isFollowing = true;
-        } else {
-            stopFollowing();
-            btn.innerText = "Enable Follow Mode";
-            btn.classList.remove('active');
-            isFollowing = false;
-        }
-    }
-
-    function startFollowing() {
-        if ("geolocation" in navigator) {
-            document.getElementById('status').innerText = "SYSTEM: TRACKING_LIVE";
-            watchId = navigator.geolocation.watchPosition((pos) => {
-                const { longitude, latitude, heading, speed } = pos.coords;
-                
+            document.getElementById('status').innerText = "TRACKING...";
+            watchId = navigator.geolocation.watchPosition(pos => {
                 map.flyTo({
-                    center: [longitude, latitude],
-                    zoom: 18,
-                    pitch: 75,
-                    bearing: heading || 0, // Auto-rotates map to your walking/driving direction
-                    essential: true,
-                    duration: 1000
+                    center: [pos.coords.longitude, pos.coords.latitude],
+                    zoom: 17, pitch: 70, essential: true, duration: 1500
                 });
-
-                document.getElementById('gps-data').innerHTML = `
-                    <b>LAT:</b> ${latitude.toFixed(4)}<br>
-                    <b>LNG:</b> ${longitude.toFixed(4)}<br>
-                    <b>SPD:</b> ${speed ? (speed * 3.6).toFixed(1) : 0} km/h
-                `;
-            }, (err) => {
-                console.error(err);
-                document.getElementById('status').innerText = "SYSTEM: SIGNAL_LOST";
-            }, { enableHighAccuracy: true });
+            }, null, { enableHighAccuracy: true });
+        } else {
+            isFollowing = false;
+            navigator.geolocation.clearWatch(watchId);
+            document.getElementById('status').innerText = "IDLE";
         }
     }
 
-    function stopFollowing() {
-        if (watchId) navigator.geolocation.clearWatch(watchId);
-        document.getElementById('status').innerText = "SYSTEM: IDLE";
-    }
-
-    // Geocoding Search bar
     const gc = new createMaptilerGeocodingControl({ apiKey: API_KEY, maplibregl: maplibregl });
     map.addControl(gc, 'top-right');
-
 </script>
 </body>
 </html>
