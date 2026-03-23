@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AETHER-NET | Supreme Navigator 2026</title>
+    <script src="https://unpkg.com/maplibre-gl@5.0.1/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@5.0.1/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://cdn.maptiler.com/maptiler-geocoding-control/v1.3.3/maplibregl.umd.js"></script>
+    <link href="https://cdn.maptiler.com/maptiler-geocoding-control/v1.3.3/style.css" rel="stylesheet">
+    <style>
+        :root { --neon: #00f2ff; --bg: #020202; --active: #3DDC84; }
+        body { margin: 0; padding: 0; background: var(--bg); color: white; font-family: 'Inter', sans-serif; overflow: hidden; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        .hud { position: absolute; z-index: 100; pointer-events: none; background: rgba(0,0,0,0.85); backdrop-filter: blur(15px); border: 1px solid rgba(0,242,255,0.2); padding: 20px; border-radius: 4px; }
+        .top-left { top: 20px; left: 20px; width: 320px; border-left: 4px solid var(--neon); }
+        .bottom-ctrl { bottom: 40px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; pointer-events: auto; }
+        
+        button { background: #111; color: var(--neon); border: 1px solid var(--neon); padding: 12px 24px; cursor: pointer; border-radius: 4px; font-weight: bold; text-transform: uppercase; font-size: 11px; transition: 0.3s; }
+        button:hover { background: var(--neon); color: #000; box-shadow: 0 0 15px var(--neon); }
+        button.active { border-color: var(--active); color: var(--active); box-shadow: 0 0 20px var(--active); }
+        
+        #year-display { font-size: 28px; color: var(--neon); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="hud top-left">
+    <div style="font-weight: bold; letter-spacing: 2px;">AETHER-OS // SUPREME</div>
+    <div id="status" style="font-size: 10px; color: var(--neon); margin-top: 5px;">SYSTEM: IDLE</div>
+    <div id="gps-data" style="font-size: 11px; margin-top: 10px; color: #888;">Waiting for satellite lock...</div>
+</div>
+
+<div class="bottom-ctrl">
+    <button id="follow-btn" onclick="toggleFollowMode()">Enable Follow Mode</button>
+    <button onclick="map.flyTo({zoom: 2, pitch: 0})">Global View</button>
+</div>
+
+<script>
+    const API_KEY = '6zP9RexeBTwxHcQlsSZT'; 
+    let watchId = null;
+    let isFollowing = false;
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: `https://api.maptiler.com/maps/hybrid/style.json?key=${API_KEY}`,
+        center: [78.9629, 20.5937], // India Center
+        zoom: 4, pitch: 45, antialias: true
+    });
+
+    map.on('style.load', () => {
+        map.setProjection({ type: 'globe' });
+        map.addSource('terrain', { type: 'raster-dem', url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${API_KEY}`, tileSize: 256 });
+        map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
+    });
+
+    function toggleFollowMode() {
+        const btn = document.getElementById('follow-btn');
+        if (!isFollowing) {
+            startFollowing();
+            btn.innerText = "Following Active";
+            btn.classList.add('active');
+            isFollowing = true;
+        } else {
+            stopFollowing();
+            btn.innerText = "Enable Follow Mode";
+            btn.classList.remove('active');
+            isFollowing = false;
+        }
+    }
+
+    function startFollowing() {
+        if ("geolocation" in navigator) {
+            document.getElementById('status').innerText = "SYSTEM: TRACKING_LIVE";
+            watchId = navigator.geolocation.watchPosition((pos) => {
+                const { longitude, latitude, heading, speed } = pos.coords;
+                
+                map.flyTo({
+                    center: [longitude, latitude],
+                    zoom: 18,
+                    pitch: 75,
+                    bearing: heading || 0, // Auto-rotates map to your walking/driving direction
+                    essential: true,
+                    duration: 1000
+                });
+
+                document.getElementById('gps-data').innerHTML = `
+                    <b>LAT:</b> ${latitude.toFixed(4)}<br>
+                    <b>LNG:</b> ${longitude.toFixed(4)}<br>
+                    <b>SPD:</b> ${speed ? (speed * 3.6).toFixed(1) : 0} km/h
+                `;
+            }, (err) => {
+                console.error(err);
+                document.getElementById('status').innerText = "SYSTEM: SIGNAL_LOST";
+            }, { enableHighAccuracy: true });
+        }
+    }
+
+    function stopFollowing() {
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        document.getElementById('status').innerText = "SYSTEM: IDLE";
+    }
+
+    // Geocoding Search bar
+    const gc = new createMaptilerGeocodingControl({ apiKey: API_KEY, maplibregl: maplibregl });
+    map.addControl(gc, 'top-right');
+
+</script>
+</body>
+</html>
